@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block title %}Настройки пользователей - АСУ ЕСПП{% endblock %}
+
+{% block content %}
+<div class="admin-container">
+    <div class="admin-sections">
+        <section class="admin-section">
+            <div class="table-header">
+                <h3>Настройки требований к паролям</h3>
+                <a href="{{ url_for('admin') }}" class="btn btn-secondary">Назад к пользователям</a>
+            </div>
+            
+            <form id="password-settings-form" class="stacked-form">
+                <div class="form-group">
+                    <label for="min-length">Минимальная длина пароля</label>
+                    <input type="number" id="min-length" name="min_length" 
+                           value="{{ password_settings.min_length }}" 
+                           min="4" max="128" required>
+                    <small class="form-hint">От 4 до 128 символов</small>
+                </div>
+                
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="require-digits" name="require_digits" 
+                               {% if password_settings.require_digits %}checked{% endif %}>
+                        <span>Требовать наличие цифр</span>
+                    </label>
+                    <small class="form-hint">Пароль должен содержать хотя бы одну цифру (0-9)</small>
+                </div>
+                
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="require-special" name="require_special" 
+                               {% if password_settings.require_special %}checked{% endif %}>
+                        <span>Требовать спецсимволы</span>
+                    </label>
+                    <small class="form-hint">Пароль должен содержать хотя бы один спецсимвол (!@#$%^&* и т.д.)</small>
+                </div>
+                
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">Сохранить настройки</button>
+                    <button type="button" class="btn btn-light" onclick="window.location.href='{{ url_for('admin') }}'">Отмена</button>
+                </div>
+            </form>
+        </section>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const form = document.getElementById('password-settings-form');
+        
+        form.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const formData = new FormData(form);
+            const payload = {
+                min_length: parseInt(formData.get('min_length'), 10),
+                require_digits: formData.get('require_digits') === 'on',
+                require_special: formData.get('require_special') === 'on'
+            };
+            
+            try {
+                const response = await fetch('/admin/api/settings/password', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                });
+                
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    const errorMsg = data.error || (data.errors && Object.values(data.errors)[0]) || 'Не удалось сохранить настройки.';
+                    throw new Error(errorMsg);
+                }
+                
+                if (window.createFlashMessage) {
+                    window.createFlashMessage(data.message || 'Настройки сохранены.', 'success');
+                }
+                
+                setTimeout(() => {
+                    window.location.href = '{{ url_for('admin') }}';
+                }, 1000);
+            } catch (error) {
+                if (window.createFlashMessage) {
+                    window.createFlashMessage(error.message || 'Не удалось сохранить настройки.', 'error');
+                }
+            }
+        });
+    });
+</script>
+{% endblock %}
+

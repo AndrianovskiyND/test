@@ -3,57 +3,458 @@
 {% block title %}Управление пользователями - АСУ ЕСПП{% endblock %}
 
 {% block content %}
-<div class="admin-container">
-    <h2>Управление пользователями</h2>
-    
-    <div class="admin-grid">
-        <div class="add-user-form">
-            <h3>Добавить пользователя</h3>
-            <form method="POST" action="{{ url_for('add_user') }}">
-                <div class="form-group">
-                    <label for="username">Имя пользователя:</label>
-                    <input type="text" id="username" name="username" required>
+<div class="admin-container" data-current-user-id="{{ current_user_id }}" data-password-settings='{{ password_settings|tojson }}'>
+    <div class="admin-sections">
+        <section class="admin-section">
+            <div class="table-header">
+                <div>
+                    <h3>Пользователи системы</h3>
+                    <span class="table-meta" id="users-count">Всего: {{ users|length }}</span>
                 </div>
-                
-                <div class="form-group">
-                    <label for="password">Пароль:</label>
-                    <input type="password" id="password" name="password" required>
+                <div class="table-header-actions">
+                    <button type="button" class="btn btn-primary" id="create-user-btn">Создать пользователя</button>
+                    <a href="{{ url_for('admin_settings') }}" class="btn btn-secondary">Настройки пользователей</a>
                 </div>
-                
-                <div class="form-group">
-                    <label for="name">Полное имя:</label>
-                    <input type="text" id="name" name="name" required>
-                </div>
-                
-                <div class="form-group">
-                    <label for="role">Роль:</label>
-                    <select id="role" name="role" required>
-                        <option value="worker">Работник</option>
-                        <option value="admin">Администратор</option>
-                    </select>
-                </div>
-                
-                <button type="submit" class="btn btn-primary">Добавить пользователя</button>
-            </form>
-        </div>
-
-        <div class="users-list">
-            <h3>Существующие пользователи</h3>
-            <div class="users-table">
-                <div class="table-header">
-                    <span>Имя пользователя</span>
-                    <span>Полное имя</span>
-                    <span>Роль</span>
-                </div>
-                {% for user_data in users %}
-                <div class="table-row">
-                    <span>{{ user_data.username }}</span>
-                    <span>{{ user_data.name }}</span>
-                    <span class="role-badge role-{{ user_data.role }}">{{ user_data.role }}</span>
-                </div>
-                {% endfor %}
             </div>
+            <div class="table-wrapper">
+                <table class="users-table" id="users-table">
+                    <thead>
+                        <tr>
+                            <th>Логин</th>
+                            <th>Полное имя</th>
+                            <th>Email</th>
+                            <th>Роль</th>
+                            <th>Создан</th>
+                            <th>Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for user in users %}
+                        <tr data-user-id="{{ user.id }}"
+                            data-username="{{ user.username }}"
+                            data-name="{{ user.name }}"
+                            data-email="{{ user.email or '' }}"
+                            data-role="{{ user.role }}">
+                            <td class="col-username">{{ user.username }}</td>
+                            <td class="col-name">{{ user.name }}</td>
+                            <td class="col-email">{{ user.email or '—' }}</td>
+                            <td class="col-role"><span class="role-badge role-{{ user.role }}">{{ user.role }}</span></td>
+                            <td class="col-created">{{ user.created_at[:16] if user.created_at else '—' }}</td>
+                            <td class="actions-cell">
+                                <button type="button" class="btn btn-small js-edit-user">Изменить</button>
+                                <button type="button" class="btn btn-small js-password-user">Сменить пароль</button>
+                                <button type="button"
+                                        class="btn btn-small btn-danger js-delete-user"
+                                        {% if user.id == current_user_id %}disabled title="Нельзя удалить свой аккаунт"{% endif %}>
+                                    Удалить
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+</div>
+
+<div class="modal-backdrop" id="user-edit-modal">
+    <div class="modal-window">
+        <h3 class="modal-title">Редактирование пользователя</h3>
+        <form id="user-edit-form" class="stacked-form" novalidate>
+            <input type="hidden" name="user_id">
+            <div class="form-group">
+                <label for="edit-name">Полное имя</label>
+                <input type="text" id="edit-name" name="name" required>
+            </div>
+            <div class="form-group">
+                <label for="edit-email">Email</label>
+                <input type="email" id="edit-email" name="email" placeholder="user@example.com">
+            </div>
+            <div class="form-group">
+                <label for="edit-role">Роль</label>
+                <select id="edit-role" name="role" required>
+                    <option value="worker">Работник</option>
+                    <option value="admin">Администратор</option>
+                </select>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-light js-close-modal">Отмена</button>
+                <button type="submit" class="btn btn-primary">Сохранить</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="modal-backdrop" id="user-password-modal">
+    <div class="modal-window">
+        <h3 class="modal-title">Смена пароля</h3>
+        <form id="user-password-form" class="stacked-form" novalidate>
+            <input type="hidden" name="user_id">
+            <div class="form-group">
+                <label for="password-new">Новый пароль</label>
+                <input type="password" id="password-new" name="new_password" minlength="6" required>
+            </div>
+            <div class="form-group">
+                <label for="password-confirm">Подтвердите пароль</label>
+                <input type="password" id="password-confirm" name="confirm_password" minlength="6" required>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-light js-close-modal">Отмена</button>
+                <button type="submit" class="btn btn-primary">Сменить пароль</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="modal-backdrop" id="user-delete-modal">
+    <div class="modal-window">
+        <h3 class="modal-title">Удалить пользователя?</h3>
+        <p class="modal-description" id="delete-confirm-text"></p>
+        <div class="modal-actions">
+            <button type="button" class="btn btn-light js-close-modal">Отмена</button>
+            <button type="button" class="btn btn-danger" id="confirm-delete-btn">Удалить</button>
         </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const container = document.querySelector('.admin-container');
+        const currentUserId = Number(container.dataset.currentUserId || '0');
+        const usersTable = document.getElementById('users-table');
+        const usersTableBody = usersTable.querySelector('tbody');
+        const usersCountEl = document.getElementById('users-count');
+
+        const editModal = document.getElementById('user-edit-modal');
+        const editForm = document.getElementById('user-edit-form');
+        const passwordModal = document.getElementById('user-password-modal');
+        const passwordForm = document.getElementById('user-password-form');
+        const deleteModal = document.getElementById('user-delete-modal');
+        const deleteConfirmText = document.getElementById('delete-confirm-text');
+        const confirmDeleteBtn = document.getElementById('confirm-delete-btn');
+
+        let activeUserId = null;
+
+        const modals = [editModal, passwordModal, deleteModal];
+
+        const closeButtons = document.querySelectorAll('.js-close-modal');
+        closeButtons.forEach((button) => {
+            button.addEventListener('click', () => {
+                const modal = button.closest('.modal-backdrop');
+                if (modal) {
+                    modal.classList.remove('active');
+                }
+            });
+        });
+
+        modals.forEach((modal) => {
+            modal.addEventListener('click', (event) => {
+                if (event.target === modal) {
+                    modal.classList.remove('active');
+                }
+            });
+        });
+
+        function openModal(modal) {
+            modal.classList.add('active');
+        }
+
+        function closeModal(modal) {
+            modal.classList.remove('active');
+        }
+
+        function escapeHtml(value) {
+            return value
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        function formatDateShort(value) {
+            if (!value) {
+                return '—';
+            }
+            return String(value).slice(0, 16);
+        }
+
+        function updateUsersCount() {
+            if (usersCountEl) {
+                usersCountEl.textContent = `Всего: ${usersTableBody.querySelectorAll('tr').length}`;
+            }
+        }
+
+        async function request(url, options) {
+            const response = await fetch(url, {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    ...(options && options.headers ? options.headers : {})
+                },
+                ...options
+            });
+            let data;
+            try {
+                data = await response.json();
+            } catch (_) {
+                data = {};
+            }
+            if (!response.ok) {
+                const message = data.error || (data.errors && Object.values(data.errors)[0]) || 'Не удалось выполнить запрос.';
+                throw new Error(message);
+            }
+            return data;
+        }
+
+        function roleBadge(role) {
+            const normalized = role === 'admin' ? 'admin' : 'worker';
+            return `<span class="role-badge role-${normalized}">${escapeHtml(normalized)}</span>`;
+        }
+
+        function buildRow(user) {
+            const tr = document.createElement('tr');
+            tr.dataset.userId = String(user.id);
+            tr.dataset.username = user.username || '';
+            tr.dataset.name = user.name || '';
+            tr.dataset.email = user.email || '';
+            tr.dataset.role = user.role || 'worker';
+            const isCurrent = user.id === currentUserId;
+            tr.innerHTML = `
+                <td class="col-username">${escapeHtml(user.username || '')}</td>
+                <td class="col-name">${escapeHtml(user.name || '')}</td>
+                <td class="col-email">${user.email ? escapeHtml(user.email) : '—'}</td>
+                <td class="col-role">${roleBadge(user.role)}</td>
+                <td class="col-created">${formatDateShort(user.created_at)}</td>
+                <td class="actions-cell">
+                    <button type="button" class="btn btn-small js-edit-user">Изменить</button>
+                    <button type="button" class="btn btn-small js-password-user">Сменить пароль</button>
+                    <button type="button" class="btn btn-small btn-danger js-delete-user" ${isCurrent ? 'disabled title="Нельзя удалить свой аккаунт"' : ''}>Удалить</button>
+                </td>
+            `;
+            return tr;
+        }
+
+        function refreshRow(user) {
+            const row = usersTableBody.querySelector(`tr[data-user-id="${user.id}"]`);
+            if (!row) {
+                return;
+            }
+            row.dataset.name = user.name || '';
+            row.dataset.email = user.email || '';
+            row.dataset.role = user.role || 'worker';
+            row.querySelector('.col-name').textContent = user.name || '';
+            row.querySelector('.col-email').textContent = user.email || '—';
+            row.querySelector('.col-role').innerHTML = roleBadge(user.role);
+            row.querySelector('.col-created').textContent = formatDateShort(user.created_at);
+
+            const deleteButton = row.querySelector('.js-delete-user');
+            if (deleteButton) {
+                if (user.id === currentUserId) {
+                    deleteButton.setAttribute('disabled', '');
+                    deleteButton.setAttribute('title', 'Нельзя удалить свой аккаунт');
+                } else {
+                    deleteButton.removeAttribute('disabled');
+                    deleteButton.removeAttribute('title');
+                }
+            }
+        }
+
+        usersTableBody.addEventListener('click', (event) => {
+            const button = event.target.closest('button');
+            if (!button) {
+                return;
+            }
+            const row = button.closest('tr');
+            if (!row) {
+                return;
+            }
+            const userId = Number(row.dataset.userId);
+
+            if (button.classList.contains('js-edit-user')) {
+                activeUserId = userId;
+                editForm.dataset.userId = String(userId);
+                editForm.elements.name.value = row.dataset.name || '';
+                editForm.elements.email.value = row.dataset.email || '';
+                editForm.elements.role.value = row.dataset.role || 'worker';
+                openModal(editModal);
+            } else if (button.classList.contains('js-password-user')) {
+                activeUserId = userId;
+                passwordForm.dataset.userId = String(userId);
+                passwordForm.reset();
+                openModal(passwordModal);
+            } else if (button.classList.contains('js-delete-user') && !button.disabled) {
+                activeUserId = userId;
+                const username = row.dataset.username || '';
+                deleteConfirmText.textContent = `Удалить пользователя «${username}»?`;
+                confirmDeleteBtn.dataset.userId = String(userId);
+                openModal(deleteModal);
+            }
+        });
+
+        editForm.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const userId = Number(editForm.dataset.userId);
+            const payload = {
+                name: editForm.elements.name.value.trim(),
+                email: editForm.elements.email.value.trim(),
+                role: editForm.elements.role.value
+            };
+
+            try {
+                const data = await request(`/admin/api/users/${userId}`, {
+                    method: 'PATCH',
+                    body: JSON.stringify(payload)
+                });
+                refreshRow(data.user);
+                closeModal(editModal);
+                createFlashMessage(data.message || 'Данные обновлены.', 'success');
+            } catch (error) {
+                createFlashMessage(error.message || 'Не удалось обновить данные пользователя.', 'error');
+            }
+        });
+
+        passwordForm.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const userId = Number(passwordForm.dataset.userId);
+            const payload = {
+                new_password: passwordForm.elements.new_password.value.trim(),
+                confirm_password: passwordForm.elements.confirm_password.value.trim()
+            };
+
+            try {
+                const data = await request(`/admin/api/users/${userId}/password`, {
+                    method: 'POST',
+                    body: JSON.stringify(payload)
+                });
+                closeModal(passwordModal);
+                passwordForm.reset();
+                createFlashMessage(data.message || 'Пароль обновлён.', 'success');
+            } catch (error) {
+                createFlashMessage(error.message || 'Не удалось обновить пароль.', 'error');
+            }
+        });
+
+        confirmDeleteBtn.addEventListener('click', async () => {
+            const userId = Number(confirmDeleteBtn.dataset.userId);
+            try {
+                const data = await request(`/admin/api/users/${userId}`, {
+                    method: 'DELETE'
+                });
+                const row = usersTableBody.querySelector(`tr[data-user-id="${userId}"]`);
+                if (row) {
+                    row.remove();
+                    updateUsersCount();
+                }
+                closeModal(deleteModal);
+                createFlashMessage(data.message || 'Пользователь удалён.', 'success');
+            } catch (error) {
+                createFlashMessage(error.message || 'Не удалось удалить пользователя.', 'error');
+            }
+        });
+
+        const createUserBtn = document.getElementById('create-user-btn');
+        const createUserModal = document.getElementById('user-create-modal');
+        const createUserForm = document.getElementById('user-create-form');
+        const passwordInput = document.getElementById('create-password');
+        const passwordHint = document.getElementById('password-hint');
+
+        if (createUserBtn && createUserModal) {
+            createUserBtn.addEventListener('click', () => {
+                createUserForm.reset();
+                updatePasswordHint();
+                openModal(createUserModal);
+            });
+        }
+
+        const passwordSettings = JSON.parse(container.dataset.passwordSettings || '{}');
+        
+        function updatePasswordHint() {
+            const hints = [];
+            if (passwordSettings.min_length) {
+                hints.push(`Минимум ${passwordSettings.min_length} символов`);
+            }
+            if (passwordSettings.require_digits) {
+                hints.push('Обязательна хотя бы одна цифра');
+            }
+            if (passwordSettings.require_special) {
+                hints.push('Обязателен хотя бы один спецсимвол');
+            }
+            if (passwordHint) {
+                passwordHint.textContent = hints.length > 0 ? hints.join(', ') : 'Минимум 6 символов';
+            }
+            if (passwordInput) {
+                passwordInput.setAttribute('minlength', passwordSettings.min_length || '6');
+            }
+        }
+
+        if (createUserForm) {
+            createUserForm.addEventListener('submit', async (event) => {
+                event.preventDefault();
+                const formData = new FormData(createUserForm);
+                const payload = {
+                    username: String(formData.get('username') || '').trim(),
+                    password: String(formData.get('password') || '').trim(),
+                    name: String(formData.get('name') || '').trim(),
+                    role: String(formData.get('role') || 'worker'),
+                    email: String(formData.get('email') || '').trim()
+                };
+
+                try {
+                    const data = await request('/admin/api/users', {
+                        method: 'POST',
+                        body: JSON.stringify(payload)
+                    });
+                    const row = buildRow(data.user);
+                    usersTableBody.appendChild(row);
+                    createUserForm.reset();
+                    updateUsersCount();
+                    closeModal(createUserModal);
+                    createFlashMessage(data.message || 'Пользователь создан.', 'success');
+                } catch (error) {
+                    createFlashMessage(error.message || 'Не удалось создать пользователя.', 'error');
+                }
+            });
+        }
+
+        updatePasswordHint();
+    });
+</script>
+
+<div class="modal-backdrop" id="user-create-modal">
+    <div class="modal-window">
+        <h3 class="modal-title">Создать пользователя</h3>
+        <form id="user-create-form" class="stacked-form" novalidate>
+            <div class="form-group">
+                <label for="create-username">Имя пользователя</label>
+                <input type="text" id="create-username" name="username" required>
+            </div>
+            <div class="form-group">
+                <label for="create-password">Пароль</label>
+                <input type="password" id="create-password" name="password" required>
+                <small class="form-hint" id="password-hint"></small>
+            </div>
+            <div class="form-group">
+                <label for="create-name">Полное имя</label>
+                <input type="text" id="create-name" name="name" required>
+            </div>
+            <div class="form-group">
+                <label for="create-email">Email</label>
+                <input type="email" id="create-email" name="email" placeholder="user@example.com">
+            </div>
+            <div class="form-group">
+                <label for="create-role">Роль</label>
+                <select id="create-role" name="role" required>
+                    <option value="worker" selected>Работник</option>
+                    <option value="admin">Администратор</option>
+                </select>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-light js-close-modal">Отмена</button>
+                <button type="submit" class="btn btn-primary">Создать</button>
+            </div>
+        </form>
     </div>
 </div>
 {% endblock %}

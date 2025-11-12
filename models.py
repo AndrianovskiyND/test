@@ -140,6 +140,27 @@ class UserManager:
         
         return [{'username': w[0], 'name': w[1]} for w in workers]
 
+    def get_assignable_users(self):
+        conn = sqlite3.connect(self.db.db_path)
+        cursor = conn.cursor()
+        cursor.execute('SELECT id, username, role, name FROM users ORDER BY name COLLATE NOCASE')
+        users = cursor.fetchall()
+        conn.close()
+        return [
+            {'id': u[0], 'username': u[1], 'role': u[2], 'name': u[3]}
+            for u in users
+        ]
+
+    def user_name_exists(self, name):
+        if not name:
+            return False
+        conn = sqlite3.connect(self.db.db_path)
+        cursor = conn.cursor()
+        cursor.execute('SELECT 1 FROM users WHERE name = ? LIMIT 1', (name,))
+        exists = cursor.fetchone() is not None
+        conn.close()
+        return exists
+
 class TaskManager:
     def __init__(self, db):
         self.db = db
@@ -195,16 +216,20 @@ class TaskManager:
         return self.get_task(task_id)
     
     def get_all_tasks(self):
+        return self.get_tasks_filtered(include_closed=True)
+
+    def get_tasks_filtered(self, include_closed=False):
         conn = sqlite3.connect(self.db.db_path)
         cursor = conn.cursor()
-        
-        cursor.execute('''
-            SELECT * FROM tasks ORDER BY created_at DESC
-        ''')
-        
+        base_query = 'SELECT * FROM tasks'
+        params = []
+        if not include_closed:
+            base_query += " WHERE status NOT IN (?, ?)"
+            params.extend(['завершена', 'отменена'])
+        base_query += ' ORDER BY datetime(created_at) DESC'
+        cursor.execute(base_query, params)
         tasks = cursor.fetchall()
         conn.close()
-        
         return [self._dict_from_row(task) for task in tasks]
     
     def get_task(self, task_id):
@@ -239,7 +264,11 @@ class TaskManager:
         
         # Получаем текущие данные
         cursor.execute('SELECT * FROM tasks WHERE id = ?', (task_id,))
-        current_task = self._dict_from_row(cursor.fetchone())
+        current_row = cursor.fetchone()
+        if not current_row:
+            conn.close()
+            return None
+        current_task = self._dict_from_row(current_row)
         
         changes = {}
         set_parts = []
@@ -288,6 +317,8 @@ class TaskManager:
         return self.get_task(task_id)
     
     def _dict_from_row(self, row):
+        if row is None:
+            return None
         return {
             'id': row[0],
             'number': row[1],

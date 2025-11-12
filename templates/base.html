@@ -25,7 +25,10 @@
             {% if messages %}
                 <div class="flash-messages">
                     {% for category, message in messages %}
-                        <div class="flash flash-{{ category }}">{{ message }}</div>
+                        <div class="flash flash-{{ category }}" data-category="{{ category }}">
+                            <span class="flash-text">{{ message }}</span>
+                            <button type="button" class="flash-close" aria-label="Закрыть уведомление">&times;</button>
+                        </div>
                     {% endfor %}
                 </div>
             {% endif %}
@@ -35,5 +38,77 @@
             {% block content %}{% endblock %}
         </main>
     </div>
+    <script>
+        (function () {
+            const AUTO_HIDE_DELAY = 5000;
+
+            function hideFlash(flashEl) {
+                if (!flashEl || flashEl.classList.contains('flash-hidden')) {
+                    return;
+                }
+                flashEl.classList.add('flash-hiding');
+                setTimeout(() => {
+                    flashEl.classList.add('flash-hidden');
+                    flashEl.remove();
+                }, 300);
+            }
+
+            function bindFlash(flashEl, delay = AUTO_HIDE_DELAY) {
+                if (!flashEl || flashEl.dataset.bound === 'true') {
+                    return;
+                }
+                flashEl.dataset.bound = 'true';
+                const closeBtn = flashEl.querySelector('.flash-close');
+                if (closeBtn) {
+                    closeBtn.addEventListener('click', () => hideFlash(flashEl));
+                }
+                if (delay > 0) {
+                    setTimeout(() => hideFlash(flashEl), delay);
+                }
+            }
+
+            function ensureContainer() {
+                let container = document.querySelector('.flash-messages');
+                if (!container) {
+                    container = document.createElement('div');
+                    container.className = 'flash-messages';
+                    const main = document.querySelector('main');
+                    if (main) {
+                        main.parentElement.insertBefore(container, main);
+                    } else {
+                        document.body.appendChild(container);
+                    }
+                }
+                return container;
+            }
+
+            window.createFlashMessage = function (message, category = 'info', delay = AUTO_HIDE_DELAY) {
+                const container = ensureContainer();
+                const flashEl = document.createElement('div');
+                flashEl.className = `flash flash-${category}`;
+                flashEl.dataset.category = category;
+
+                const textSpan = document.createElement('span');
+                textSpan.className = 'flash-text';
+                textSpan.textContent = message;
+
+                const closeBtn = document.createElement('button');
+                closeBtn.type = 'button';
+                closeBtn.className = 'flash-close';
+                closeBtn.setAttribute('aria-label', 'Закрыть уведомление');
+                closeBtn.innerHTML = '&times;';
+
+                flashEl.appendChild(textSpan);
+                flashEl.appendChild(closeBtn);
+                container.appendChild(flashEl);
+                bindFlash(flashEl, delay);
+                return flashEl;
+            };
+
+            document.addEventListener('DOMContentLoaded', () => {
+                document.querySelectorAll('.flash').forEach((flashEl) => bindFlash(flashEl));
+            });
+        })();
+    </script>
 </body>
 </html>

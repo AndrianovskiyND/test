@@ -13,9 +13,19 @@
     </div>
 </div>
 
-{% if tasks %}
+<div class="filter-bar">
+    <label class="toggle-control">
+        <input type="checkbox" id="filter-show-all" {% if show_all %}checked{% endif %}>
+        <span>Показать все задачи</span>
+    </label>
+    <div class="dashboard-loading" id="dashboard-loading">
+        <span class="loading-spinner"></span>
+        <span>Обновляем список...</span>
+    </div>
+</div>
+
 <div class="table-container">
-    <table class="tasks-table">
+    <table class="tasks-table" id="tasks-table">
         <thead>
             <tr>
                 <th>Номер</th>
@@ -29,50 +39,451 @@
                 <th>Действия</th>
             </tr>
         </thead>
-        <tbody>
-            {% for task in tasks %}
-            <tr>
-                <td class="task-number">{{ task.number }}</td>
-                <td class="task-title">
-                    <a href="{{ url_for('task_detail', task_id=task.id) }}">{{ task.title }}</a>
-                </td>
-                <td>
-                    <span class="status status-{{ task.status }}">{{ status_labels[task.status] }}</span>
-                </td>
-                <td>
-                    <div class="progress-cell">
-                        <div class="progress-bar">
-                            <div class="progress-fill" style="width: {{ task.progress }}%"></div>
-                        </div>
-                        <span class="progress-text">{{ task.progress }}%</span>
-                    </div>
-                </td>
-                <td>
-                    <span class="priority priority-{{ task.priority }}">{{ priority_labels[task.priority] }}</span>
-                </td>
-                <td>
-                    <span class="urgency urgency-{{ task.urgency }}">{{ urgency_labels[task.urgency] }}</span>
-                </td>
-                <td class="assigned-to">
-                    {% if task.assigned_to %}
-                        {{ task.assigned_to }}
-                    {% else %}
-                        <span class="not-assigned">Не назначен</span>
-                    {% endif %}
-                </td>
-                <td class="task-date">{{ task.created_at[:10] }}</td>
-                <td class="task-actions">
-                    <a href="{{ url_for('task_detail', task_id=task.id) }}" class="btn btn-small">Подробнее</a>
-                </td>
-            </tr>
-            {% endfor %}
+        <tbody id="tasks-table-body">
         </tbody>
     </table>
 </div>
-{% else %}
-<div class="no-tasks">
+
+<div class="no-tasks hidden" id="dashboard-empty-state">
     <h3>Задачи отсутствуют</h3>
-    <p>Пока нет ни одной задачи. <a href="{{ url_for('create_task_public') }}">Создайте первую задачу</a></p>
+    <p>Нет задач, соответствующих текущему фильтру.</p>
+    <p><a href="{{ url_for('create_task_public') }}">Создайте новую задачу</a> или измените фильтр.</p>
 </div>
-{% endif %}
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const PRIORITY_ORDER = ['critical', 'high', 'medium', 'low'];
+        const URGENCY_ORDER = ['critical', 'high', 'medium', 'low'];
+        const CLOSED_STATUSES = new Set(['завершена', 'отменена']);
+
+        const state = {
+            showAll: {{ show_all|tojson }},
+            tasks: {{ tasks|tojson }},
+            meta: {
+                priorityLabels: {{ priority_labels|tojson }},
+                urgencyLabels: {{ urgency_labels|tojson }},
+                statusLabels: {{ status_labels|tojson }},
+                statusGroups: {{ status_groups|tojson }},
+                users: {{ assignable_users|tojson }}
+            },
+            loading: false
+        };
+
+        const tableBody = document.getElementById('tasks-table-body');
+        const showAllCheckbox = document.getElementById('filter-show-all');
+        const loadingIndicator = document.getElementById('dashboard-loading');
+        const emptyState = document.getElementById('dashboard-empty-state');
+
+        function formatDate(value) {
+            if (!value) {
+                return '-';
+            }
+            const normalized = value.replace(' ', 'T');
+            const parsed = new Date(normalized);
+            if (Number.isNaN(parsed.getTime())) {
+                return value;
+            }
+            return parsed.toLocaleString('ru-RU', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+
+        function sortTasks(tasks) {
+            return [...tasks].sort((a, b) => {
+                const dateA = new Date((a.created_at || '').replace(' ', 'T'));
+                const dateB = new Date((b.created_at || '').replace(' ', 'T'));
+                return dateB - dateA;
+            });
+        }
+
+        function groupTasks(tasks) {
+            const map = {};
+            const statuses = {};
+            state.meta.statusGroups.forEach(group => {
+                map[group.key] = [];
+                group.statuses.forEach(status => {
+                    statuses[status] = group.key;
+                });
+            });
+
+            const others = [];
+            tasks.forEach(task => {
+                const groupKey = statuses[task.status];
+                if (groupKey) {
+                    map[groupKey].push(task);
+                } else {
+                    others.push(task);
+                }
+            });
+
+            if (others.length) {
+                map['other'] = others;
+            }
+            return map;
+        }
+
+        function createGroupRow(label) {
+            const tr = document.createElement('tr');
+            tr.className = 'tasks-group-row';
+            const td = document.createElement('td');
+            td.colSpan = 9;
+            td.textContent = label;
+            tr.appendChild(td);
+            return tr;
+        }
+
+        function createStatusBadge(task) {
+            const span = document.createElement('span');
+            const statusClass = `status-${task.status}`;
+            span.className = `status-badge ${statusClass}`;
+            span.textContent = state.meta.statusLabels[task.status] || task.status;
+            return span;
+        }
+
+        function createProgressCell(task) {
+            const td = document.createElement('td');
+            td.className = 'progress-editor-cell';
+            td.dataset.field = 'progress';
+
+            const visual = document.createElement('div');
+            visual.className = 'progress-display';
+
+            const bar = document.createElement('div');
+            bar.className = 'progress-bar';
+            const fill = document.createElement('div');
+            fill.className = 'progress-fill';
+            fill.style.width = `${task.progress}%`;
+            bar.appendChild(fill);
+
+            const text = document.createElement('span');
+            text.className = 'progress-text';
+            text.textContent = `${task.progress}%`;
+
+            visual.appendChild(bar);
+            visual.appendChild(text);
+
+            const editor = document.createElement('div');
+            editor.className = 'inline-progress-wrapper';
+            const input = document.createElement('input');
+            input.type = 'number';
+            input.min = '0';
+            input.max = '100';
+            input.className = 'inline-input';
+            input.value = task.progress;
+            input.dataset.field = 'progress';
+
+            editor.appendChild(input);
+
+            td.appendChild(visual);
+            td.appendChild(editor);
+            return td;
+        }
+
+        function createSelectCell(task, field, order, labels) {
+            const td = document.createElement('td');
+            const select = document.createElement('select');
+            select.className = 'inline-select';
+            select.dataset.field = field;
+
+            order.forEach(value => {
+                const option = document.createElement('option');
+                option.value = value;
+                option.textContent = labels[value] || value;
+                select.appendChild(option);
+            });
+
+            select.value = task[field];
+            td.appendChild(select);
+            return td;
+        }
+
+        function createAssignedCell(task) {
+            const td = document.createElement('td');
+            const select = document.createElement('select');
+            select.className = 'inline-select';
+            select.dataset.field = 'assigned_to';
+
+            const emptyOption = document.createElement('option');
+            emptyOption.value = '';
+            emptyOption.textContent = 'Не назначен';
+            select.appendChild(emptyOption);
+
+            state.meta.users.forEach(user => {
+                const option = document.createElement('option');
+                option.value = user.name;
+                option.textContent = `${user.name} (${user.role})`;
+                select.appendChild(option);
+            });
+
+            select.value = task.assigned_to || '';
+            td.appendChild(select);
+            return td;
+        }
+
+        function createTaskRow(task) {
+            const tr = document.createElement('tr');
+            tr.dataset.taskId = task.id;
+
+            const numberCell = document.createElement('td');
+            numberCell.className = 'task-number';
+            numberCell.textContent = task.number;
+            tr.appendChild(numberCell);
+
+            const titleCell = document.createElement('td');
+            titleCell.className = 'task-title';
+            const link = document.createElement('a');
+            link.href = `{{ url_for('task_detail', task_id=0) }}`.replace('0', task.id);
+            link.textContent = task.title;
+            titleCell.appendChild(link);
+            tr.appendChild(titleCell);
+
+            const statusCell = document.createElement('td');
+            statusCell.appendChild(createStatusBadge(task));
+            tr.appendChild(statusCell);
+
+            tr.appendChild(createProgressCell(task));
+
+            const priorityCell = createSelectCell(task, 'priority', PRIORITY_ORDER, state.meta.priorityLabels);
+            tr.appendChild(priorityCell);
+
+            const urgencyCell = createSelectCell(task, 'urgency', URGENCY_ORDER, state.meta.urgencyLabels);
+            tr.appendChild(urgencyCell);
+
+            tr.appendChild(createAssignedCell(task));
+
+            const createdCell = document.createElement('td');
+            createdCell.className = 'task-date';
+            createdCell.textContent = formatDate(task.created_at);
+            tr.appendChild(createdCell);
+
+            const actionsCell = document.createElement('td');
+            actionsCell.className = 'task-actions';
+            const detailsLink = document.createElement('a');
+            detailsLink.href = `{{ url_for('task_detail', task_id=0) }}`.replace('0', task.id);
+            detailsLink.className = 'btn btn-small';
+            detailsLink.textContent = 'Подробнее';
+            actionsCell.appendChild(detailsLink);
+            tr.appendChild(actionsCell);
+
+            return tr;
+        }
+
+        function renderTasks() {
+            const filteredTasks = state.showAll ? state.tasks : state.tasks.filter(task => !CLOSED_STATUSES.has(task.status));
+            const grouped = groupTasks(sortTasks(filteredTasks));
+            tableBody.innerHTML = '';
+            let renderedCount = 0;
+
+            state.meta.statusGroups.forEach(group => {
+                const groupTasks = grouped[group.key] || [];
+                if (groupTasks.length) {
+                    tableBody.appendChild(createGroupRow(group.label));
+                    groupTasks.forEach(task => {
+                        tableBody.appendChild(createTaskRow(task));
+                        renderedCount += 1;
+                    });
+                }
+            });
+
+            if (grouped.other && grouped.other.length) {
+                tableBody.appendChild(createGroupRow('Прочие'));
+                grouped.other.forEach(task => {
+                    tableBody.appendChild(createTaskRow(task));
+                    renderedCount += 1;
+                });
+            }
+
+            if (renderedCount === 0) {
+                emptyState.classList.remove('hidden');
+            } else {
+                emptyState.classList.add('hidden');
+            }
+        }
+
+        function updateUrl(showAll) {
+            const url = new URL(window.location.href);
+            if (showAll) {
+                url.searchParams.set('show_all', '1');
+            } else {
+                url.searchParams.delete('show_all');
+            }
+            window.history.replaceState({}, '', url.toString());
+        }
+
+        function setLoading(isLoading) {
+            state.loading = isLoading;
+            if (loadingIndicator) {
+                loadingIndicator.classList.toggle('active', isLoading);
+            }
+        }
+
+        function applyTaskUpdate(updatedTask) {
+            const idx = state.tasks.findIndex(item => item.id === updatedTask.id);
+            if (idx >= 0) {
+                state.tasks[idx] = updatedTask;
+            } else {
+                state.tasks.push(updatedTask);
+            }
+
+            if (!state.showAll && CLOSED_STATUSES.has(updatedTask.status)) {
+                state.tasks = state.tasks.filter(item => item.id !== updatedTask.id);
+                createFlashMessage('Задача перемещена в список закрытых и скрыта из таблицы.', 'info');
+            }
+
+            renderTasks();
+        }
+
+        function handleFieldChange(event) {
+            const target = event.target;
+            if (!target.classList.contains('inline-input') && !target.classList.contains('inline-select')) {
+                return;
+            }
+
+            const row = target.closest('tr[data-task-id]');
+            if (!row) {
+                return;
+            }
+
+            const taskId = Number(row.dataset.taskId);
+            const field = target.dataset.field;
+            const previousTask = state.tasks.find(task => task.id === taskId);
+            if (!field || !previousTask) {
+                return;
+            }
+
+            let value = target.value;
+            if (field === 'progress') {
+                const numericValue = Number(value);
+                if (!Number.isFinite(numericValue) || numericValue < 0 || numericValue > 100) {
+                    target.value = previousTask.progress;
+                    target.classList.add('cell-error');
+                    setTimeout(() => target.classList.remove('cell-error'), 600);
+                    createFlashMessage('Прогресс должен быть числом от 0 до 100.', 'error');
+                    return;
+                }
+                value = numericValue;
+            }
+
+            if (field === 'assigned_to' && value === '') {
+                value = null;
+            }
+
+            if (previousTask[field] === value || (previousTask[field] == null && value == null)) {
+                return;
+            }
+
+            const cell = target.closest('td');
+            if (cell) {
+                cell.classList.add('cell-saving');
+            }
+            target.disabled = true;
+
+            const payload = {};
+            payload[field] = value;
+
+            fetch(`/api/tasks/${taskId}`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify(payload)
+            })
+                .then(async response => {
+                    const data = await response.json().catch(() => ({}));
+                    if (!response.ok) {
+                        const errorMessage = data.errors
+                            ? Object.values(data.errors).join(' ')
+                            : (data.error || 'Не удалось сохранить изменения.');
+                        throw new Error(errorMessage);
+                    }
+                    return data;
+                })
+                .then(data => {
+                    if (data.meta) {
+                        state.meta.priorityLabels = data.meta.priority_labels || state.meta.priorityLabels;
+                        state.meta.urgencyLabels = data.meta.urgency_labels || state.meta.urgencyLabels;
+                        state.meta.statusLabels = data.meta.status_labels || state.meta.statusLabels;
+                    }
+                    if (data.task) {
+                        applyTaskUpdate(data.task);
+                    }
+                    createFlashMessage('Изменения сохранены.', 'success');
+                })
+                .catch(error => {
+                    createFlashMessage(error.message || 'Ошибка сохранения.', 'error');
+                    if (field === 'priority' || field === 'urgency') {
+                        target.value = previousTask[field];
+                    } else if (field === 'assigned_to') {
+                        target.value = previousTask.assigned_to || '';
+                    } else if (field === 'progress') {
+                        target.value = previousTask.progress;
+                    }
+                })
+                .finally(() => {
+                    target.disabled = false;
+                    if (cell) {
+                        cell.classList.remove('cell-saving');
+                    }
+                });
+        }
+
+        function fetchTasks(showAll) {
+            setLoading(true);
+            fetch(`/api/tasks?show_all=${showAll ? 1 : 0}`, {
+                headers: {
+                    'Accept': 'application/json'
+                }
+            })
+                .then(async response => {
+                    const data = await response.json().catch(() => ({}));
+                    if (!response.ok) {
+                        throw new Error(data.error || 'Не удалось получить задачи.');
+                    }
+                    return data;
+                })
+                .then(data => {
+                    state.tasks = data.tasks || [];
+                    if (data.meta) {
+                        state.showAll = !!data.meta.show_all;
+                        state.meta.priorityLabels = data.meta.priority_labels || state.meta.priorityLabels;
+                        state.meta.urgencyLabels = data.meta.urgency_labels || state.meta.urgencyLabels;
+                        state.meta.statusLabels = data.meta.status_labels || state.meta.statusLabels;
+                        state.meta.statusGroups = data.meta.status_groups || state.meta.statusGroups;
+                        state.meta.users = data.meta.assignable_users || state.meta.users;
+                    } else {
+                        state.showAll = showAll;
+                    }
+                    showAllCheckbox.checked = state.showAll;
+                    updateUrl(state.showAll);
+                    renderTasks();
+                })
+                .catch(error => {
+                    createFlashMessage(error.message || 'Ошибка загрузки задач.', 'error');
+                    showAllCheckbox.checked = state.showAll;
+                })
+                .finally(() => {
+                    setLoading(false);
+                });
+        }
+
+        showAllCheckbox.addEventListener('change', (event) => {
+            const desired = event.target.checked;
+            if (desired === state.showAll) {
+                return;
+            }
+            state.showAll = desired;
+            fetchTasks(state.showAll);
+        });
+
+        tableBody.addEventListener('change', handleFieldChange);
+
+        updateUrl(state.showAll);
+        renderTasks();
+    });
+</script>
 {% endblock %}

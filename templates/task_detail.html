@@ -18,23 +18,23 @@
             <div class="info-grid">
                 <div class="info-item">
                     <label>Статус:</label>
-                    <span class="status status-{{ task.status }}">{{ status_labels[task.status] }}</span>
+                    <span class="status-badge status-{{ task.status }}" data-role="task-status-label">{{ status_labels[task.status] }}</span>
                 </div>
                 <div class="info-item">
                     <label>Прогресс:</label>
-                    <span class="progress-value">{{ task.progress }}%</span>
+                    <span class="progress-value" data-role="task-progress-value">{{ task.progress }}%</span>
                 </div>
                 <div class="info-item">
                     <label>Срочность:</label>
-                    <span class="urgency urgency-{{ task.urgency }}">{{ urgency_labels[task.urgency] }}</span>
+                    <span class="urgency urgency-{{ task.urgency }}" data-role="task-urgency-label">{{ urgency_labels[task.urgency] }}</span>
                 </div>
                 <div class="info-item">
                     <label>Важность:</label>
-                    <span class="priority priority-{{ task.priority }}">{{ priority_labels[task.priority] }}</span>
+                    <span class="priority priority-{{ task.priority }}" data-role="task-priority-label">{{ priority_labels[task.priority] }}</span>
                 </div>
                 <div class="info-item">
                     <label>Ответственный:</label>
-                    <span class="assigned-to">
+                    <span class="assigned-to" data-role="task-assignee">
                         {% if task.assigned_to %}
                             {{ task.assigned_to }}
                         {% else %}
@@ -48,12 +48,18 @@
                 </div>
                 <div class="info-item">
                     <label>Создана:</label>
-                    <span>{{ task.created_at }}</span>
+                    <span data-role="task-created-at">{{ task.created_at }}</span>
                 </div>
                 <div class="info-item">
                     <label>Обновлена:</label>
-                    <span>{{ task.updated_at }}</span>
+                    <span data-role="task-updated-at">{{ task.updated_at }}</span>
                 </div>
+            </div>
+
+            <div class="task-detail-actions">
+                {% if task.status not in ['завершена', 'отменена'] %}
+                <button type="button" class="btn btn-danger" id="close-task-button">Закрыть задачу</button>
+                {% endif %}
             </div>
 
             <!-- Форма обновления задачи -->
@@ -103,9 +109,9 @@
                     <label for="assigned_to">Назначить на:</label>
                     <select id="assigned_to" name="assigned_to">
                         <option value="">Не назначен</option>
-                        {% for worker in workers %}
-                        <option value="{{ worker.name }}" {% if task.assigned_to == worker.name %}selected{% endif %}>
-                            {{ worker.name }}
+                        {% for user in assignable_users %}
+                        <option value="{{ user.name }}" {% if task.assigned_to == user.name %}selected{% endif %}>
+                            {{ user.name }} ({{ user.role }})
                         </option>
                         {% endfor %}
                     </select>
@@ -152,7 +158,7 @@
 
         <div class="task-history-card">
             <h3>История изменений</h3>
-            <div class="history-list">
+            <div class="history-list" data-role="history-list">
                 {% for event in task.history|reverse %}
                 <div class="history-item">
                     <div class="history-header">
@@ -176,4 +182,308 @@
         </div>
     </div>
 </div>
+
+<div class="modal-backdrop" id="close-task-modal" aria-hidden="true">
+    <div class="modal-window">
+        <h3 class="modal-title">Закрыть задачу?</h3>
+        <p class="modal-description">
+            Подтверждаете перевод задачи в статус «Завершена»? Прогресс будет автоматически установлен на 100%.
+        </p>
+        <div class="modal-actions">
+            <button type="button" class="btn btn-light" data-action="cancel">Отмена</button>
+            <button type="button" class="btn btn-danger" data-action="confirm">Закрыть задачу</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const CLOSED_STATUSES = new Set(['завершена', 'отменена']);
+        let taskData = {{ task|tojson }};
+        const labels = {
+            status: {{ status_labels|tojson }},
+            priority: {{ priority_labels|tojson }},
+            urgency: {{ urgency_labels|tojson }}
+        };
+
+        const updateForm = document.querySelector('.update-form');
+        const closeTaskButton = document.getElementById('close-task-button');
+        const closeModal = document.getElementById('close-task-modal');
+        const modalCancel = closeModal ? closeModal.querySelector('[data-action="cancel"]') : null;
+        const modalConfirm = closeModal ? closeModal.querySelector('[data-action="confirm"]') : null;
+
+        const statusBadge = document.querySelector('[data-role="task-status-label"]');
+        const progressValueEl = document.querySelector('[data-role="task-progress-value"]');
+        const urgencyLabelEl = document.querySelector('[data-role="task-urgency-label"]');
+        const priorityLabelEl = document.querySelector('[data-role="task-priority-label"]');
+        const assigneeEl = document.querySelector('[data-role="task-assignee"]');
+        const createdAtEl = document.querySelector('[data-role="task-created-at"]');
+        const updatedAtEl = document.querySelector('[data-role="task-updated-at"]');
+        const historyContainer = document.querySelector('[data-role="history-list"]');
+
+        const statusSelect = updateForm ? updateForm.querySelector('#status') : null;
+        const progressInput = updateForm ? updateForm.querySelector('#progress') : null;
+        const urgencySelect = updateForm ? updateForm.querySelector('#urgency') : null;
+        const prioritySelect = updateForm ? updateForm.querySelector('#priority') : null;
+        const assigneeSelect = updateForm ? updateForm.querySelector('#assigned_to') : null;
+        const submitButton = updateForm ? updateForm.querySelector('button[type="submit"]') : null;
+
+        function renderHistory(history) {
+            if (!historyContainer) {
+                return;
+            }
+            historyContainer.innerHTML = '';
+            const events = Array.isArray(history) ? [...history].reverse() : [];
+            if (events.length === 0) {
+                const emptyMessage = document.createElement('p');
+                emptyMessage.className = 'no-history';
+                emptyMessage.textContent = 'История изменений пока пуста.';
+                historyContainer.appendChild(emptyMessage);
+                return;
+            }
+
+            events.forEach(event => {
+                const item = document.createElement('div');
+                item.className = 'history-item';
+
+                const header = document.createElement('div');
+                header.className = 'history-header';
+                const userEl = document.createElement('strong');
+                userEl.textContent = event.user || '—';
+                const dateEl = document.createElement('span');
+                dateEl.className = 'history-date';
+                dateEl.textContent = event.timestamp || '';
+                header.appendChild(userEl);
+                header.appendChild(dateEl);
+                item.appendChild(header);
+
+                const actionEl = document.createElement('div');
+                actionEl.className = 'history-action';
+                actionEl.textContent = event.action || 'Обновление';
+                item.appendChild(actionEl);
+
+                if (event.changes && Object.keys(event.changes).length) {
+                    const changesWrap = document.createElement('div');
+                    changesWrap.className = 'history-changes';
+
+                    Object.entries(event.changes).forEach(([field, change]) => {
+                        const changeItem = document.createElement('div');
+                        changeItem.className = 'change-item';
+
+                        const labelEl = document.createElement('strong');
+                        labelEl.textContent = `${field}:`;
+                        changeItem.appendChild(labelEl);
+
+                        let detailsText = '';
+                        if (change && typeof change === 'object' && 'from' in change && 'to' in change) {
+                            detailsText = ` ${change.from} → ${change.to}`;
+                        } else {
+                            detailsText = ` ${change}`;
+                        }
+
+                        changeItem.append(detailsText);
+                        changesWrap.appendChild(changeItem);
+                    });
+
+                    item.appendChild(changesWrap);
+                }
+
+                historyContainer.appendChild(item);
+            });
+        }
+
+        function updateStatusBadge() {
+            if (!statusBadge) {
+                return;
+            }
+            statusBadge.textContent = labels.status[taskData.status] || taskData.status;
+            statusBadge.className = `status-badge status-${taskData.status}`;
+        }
+
+        function updateAssigneeDisplay() {
+            if (!assigneeEl) {
+                return;
+            }
+            if (taskData.assigned_to) {
+                assigneeEl.textContent = taskData.assigned_to;
+            } else {
+                assigneeEl.innerHTML = '<span class="not-assigned">Не назначен</span>';
+            }
+        }
+
+        function updateInfoBlocks() {
+            updateStatusBadge();
+            if (progressValueEl) {
+                progressValueEl.textContent = `${taskData.progress}%`;
+            }
+            if (urgencyLabelEl) {
+                urgencyLabelEl.textContent = labels.urgency[taskData.urgency] || taskData.urgency;
+                urgencyLabelEl.className = `urgency urgency-${taskData.urgency}`;
+            }
+            if (priorityLabelEl) {
+                priorityLabelEl.textContent = labels.priority[taskData.priority] || taskData.priority;
+                priorityLabelEl.className = `priority priority-${taskData.priority}`;
+            }
+            updateAssigneeDisplay();
+            if (createdAtEl) {
+                createdAtEl.textContent = taskData.created_at || '';
+            }
+            if (updatedAtEl) {
+                updatedAtEl.textContent = taskData.updated_at || '';
+            }
+        }
+
+        function updateFormValues() {
+            if (statusSelect) {
+                statusSelect.value = taskData.status;
+            }
+            if (progressInput) {
+                progressInput.value = taskData.progress;
+            }
+            if (urgencySelect) {
+                urgencySelect.value = taskData.urgency;
+            }
+            if (prioritySelect) {
+                prioritySelect.value = taskData.priority;
+            }
+            if (assigneeSelect) {
+                assigneeSelect.value = taskData.assigned_to || '';
+            }
+        }
+
+        function setCloseButtonVisibility() {
+            if (!closeTaskButton) {
+                return;
+            }
+            if (CLOSED_STATUSES.has(taskData.status)) {
+                closeTaskButton.classList.add('hidden');
+            } else {
+                closeTaskButton.classList.remove('hidden');
+            }
+        }
+
+        function refreshTaskView() {
+            updateInfoBlocks();
+            updateFormValues();
+            renderHistory(taskData.history || []);
+            setCloseButtonVisibility();
+        }
+
+        function parseResponse(response) {
+            return response.json().catch(() => ({})).then(data => {
+                if (!response.ok) {
+                    const errors = data.errors ? Object.values(data.errors).join(' ') : data.error;
+                    throw new Error(errors || 'Не удалось обновить задачу.');
+                }
+                return data;
+            });
+        }
+
+        function patchTask(payload, successMessage = 'Изменения сохранены.') {
+            return fetch(`/api/tasks/${taskData.id}`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify(payload)
+            })
+                .then(parseResponse)
+                .then(data => {
+                    if (data.task) {
+                        taskData = data.task;
+                        refreshTaskView();
+                    }
+                    if (successMessage) {
+                        createFlashMessage(successMessage, 'success');
+                    }
+                    return data;
+                });
+        }
+
+        if (updateForm) {
+            updateForm.addEventListener('submit', (event) => {
+                event.preventDefault();
+                if (submitButton) {
+                    submitButton.disabled = true;
+                }
+
+                const formData = new FormData(updateForm);
+                const payload = {
+                    status: formData.get('status'),
+                    progress: Number(formData.get('progress')),
+                    urgency: formData.get('urgency'),
+                    priority: formData.get('priority'),
+                    assigned_to: formData.get('assigned_to') || null
+                };
+
+                if (!Number.isFinite(payload.progress) || payload.progress < 0 || payload.progress > 100) {
+                    createFlashMessage('Прогресс должен быть числом от 0 до 100.', 'error');
+                    if (submitButton) {
+                        submitButton.disabled = false;
+                    }
+                    return;
+                }
+
+                patchTask(payload, 'Задача обновлена.')
+                    .catch(error => {
+                        createFlashMessage(error.message || 'Не удалось обновить задачу.', 'error');
+                    })
+                    .finally(() => {
+                        if (submitButton) {
+                            submitButton.disabled = false;
+                        }
+                    });
+            });
+        }
+
+        function openModal() {
+            if (closeModal) {
+                closeModal.classList.add('active');
+                closeModal.setAttribute('aria-hidden', 'false');
+            }
+        }
+
+        function closeModalWindow() {
+            if (closeModal) {
+                closeModal.classList.remove('active');
+                closeModal.setAttribute('aria-hidden', 'true');
+            }
+        }
+
+        if (closeTaskButton && closeModal) {
+            closeTaskButton.addEventListener('click', openModal);
+        }
+
+        if (modalCancel) {
+            modalCancel.addEventListener('click', closeModalWindow);
+        }
+
+        if (closeModal) {
+            closeModal.addEventListener('click', (event) => {
+                if (event.target === closeModal) {
+                    closeModalWindow();
+                }
+            });
+        }
+
+        if (modalConfirm) {
+            modalConfirm.addEventListener('click', () => {
+                modalConfirm.disabled = true;
+                patchTask({ status: 'завершена', progress: 100 }, 'Задача закрыта.')
+                    .then(() => {
+                        closeModalWindow();
+                    })
+                    .catch(error => {
+                        createFlashMessage(error.message || 'Не удалось закрыть задачу.', 'error');
+                    })
+                    .finally(() => {
+                        modalConfirm.disabled = false;
+                    });
+            });
+        }
+
+        refreshTaskView();
+    });
+</script>
 {% endblock %}

@@ -1,0 +1,60 @@
+[
+  {
+    "id": 1,
+    "number": "TASK-251112-0001",
+    "title": "Хочу много вкусняшек",
+    "description": "Мне нужна:\r\nКока кола\r\nБургер",
+    "priority": "critical",
+    "urgency": "critical",
+    "status": "in_progress",
+    "progress": 20,
+    "created_by": "Никита",
+    "created_at": "2025-11-12 14:13:46",
+    "updated_at": "2025-11-12 14:17:32",
+    "history": [
+      {
+        "action": "Создана задача",
+        "user": "Никита",
+        "timestamp": "2025-11-12 14:13:46",
+        "changes": {}
+      },
+      {
+        "action": "Добавлен комментарий",
+        "user": "Администратор",
+        "timestamp": "2025-11-12 14:15:03",
+        "changes": {
+          "comment": "Пошёл в магазин"
+        }
+      },
+      {
+        "action": "Обновление задачи",
+        "user": "Администратор",
+        "timestamp": "2025-11-12 14:15:16",
+        "changes": {
+          "progress": {
+            "from": 0,
+            "to": 20
+          }
+        }
+      },
+      {
+        "action": "Обновление задачи",
+        "user": "Работник",
+        "timestamp": "2025-11-12 14:17:32",
+        "changes": {
+          "status": {
+            "from": "new",
+            "to": "in_progress"
+          }
+        }
+      }
+    ],
+    "comments": [
+      {
+        "user": "Администратор",
+        "text": "Пошёл в магазин",
+        "timestamp": "2025-11-12 14:15:03"
+      }
+    ]
+  }
+]

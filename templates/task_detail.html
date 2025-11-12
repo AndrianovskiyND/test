@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+
+{% block title %}Задача {{ task.number }} - АСУ ЕСПП{% endblock %}
+
+{% block content %}
+<div class="task-detail">
+    <div class="task-detail-header">
+        <div class="task-main-info">
+            <h2>{{ task.title }}</h2>
+            <p class="task-number">Номер: {{ task.number }}</p>
+        </div>
+        <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">← Назад к списку</a>
+    </div>
+
+    <div class="task-detail-grid">
+        <div class="task-info-card">
+            <h3>Информация о задаче</h3>
+            <div class="info-grid">
+                <div class="info-item">
+                    <label>Статус:</label>
+                    <span class="status status-{{ task.status }}">{{ task.status }}</span>
+                </div>
+                <div class="info-item">
+                    <label>Прогресс:</label>
+                    <span class="progress-value">{{ task.progress }}%</span>
+                </div>
+                <div class="info-item">
+                    <label>Срочность:</label>
+                    <span class="urgency urgency-{{ task.urgency }}">{{ task.urgency }}</span>
+                </div>
+                <div class="info-item">
+                    <label>Важность:</label>
+                    <span class="priority priority-{{ task.priority }}">{{ task.priority }}</span>
+                </div>
+                <div class="info-item">
+                    <label>Создал:</label>
+                    <span>{{ task.created_by }}</span>
+                </div>
+                <div class="info-item">
+                    <label>Создана:</label>
+                    <span>{{ task.created_at }}</span>
+                </div>
+                <div class="info-item">
+                    <label>Обновлена:</label>
+                    <span>{{ task.updated_at }}</span>
+                </div>
+            </div>
+
+            <!-- Форма обновления задачи -->
+            <form method="POST" action="{{ url_for('update_task', task_id=task.id) }}" class="update-form">
+                <h4>Обновить задачу</h4>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="status">Статус:</label>
+                        <select id="status" name="status">
+                            <option value="new" {% if task.status == 'new' %}selected{% endif %}>Новая</option>
+                            <option value="in_progress" {% if task.status == 'in_progress' %}selected{% endif %}>В работе</option>
+                            <option value="testing" {% if task.status == 'testing' %}selected{% endif %}>Тестирование</option>
+                            <option value="completed" {% if task.status == 'completed' %}selected{% endif %}>Завершена</option>
+                            <option value="cancelled" {% if task.status == 'cancelled' %}selected{% endif %}>Отменена</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="progress">Прогресс (%):</label>
+                        <input type="number" id="progress" name="progress" min="0" max="100" value="{{ task.progress }}">
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="urgency">Срочность:</label>
+                        <select id="urgency" name="urgency">
+                            <option value="critical" {% if task.urgency == 'critical' %}selected{% endif %}>Критично</option>
+                            <option value="high" {% if task.urgency == 'high' %}selected{% endif %}>Срочно</option>
+                            <option value="medium" {% if task.urgency == 'medium' %}selected{% endif %}>Средняя</option>
+                            <option value="low" {% if task.urgency == 'low' %}selected{% endif %}>Не срочно</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="priority">Важность:</label>
+                        <select id="priority" name="priority">
+                            <option value="critical" {% if task.priority == 'critical' %}selected{% endif %}>Критически важно</option>
+                            <option value="high" {% if task.priority == 'high' %}selected{% endif %}>Высокая</option>
+                            <option value="medium" {% if task.priority == 'medium' %}selected{% endif %}>Средняя</option>
+                            <option value="low" {% if task.priority == 'low' %}selected{% endif %}>Низкая</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <button type="submit" class="btn btn-primary">Обновить задачу</button>
+            </form>
+        </div>
+
+        <div class="task-content-card">
+            <h3>Подробное описание</h3>
+            <div class="description-content">
+                {{ task.description|replace('\n', '<br>')|safe }}
+            </div>
+
+            <!-- Комментарии -->
+            <div class="comments-section">
+                <h3>Комментарии</h3>
+                <form method="POST" action="{{ url_for('add_comment', task_id=task.id) }}" class="comment-form">
+                    <div class="form-group">
+                        <textarea name="comment" placeholder="Добавьте комментарий..." rows="3" required></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Добавить комментарий</button>
+                </form>
+
+                {% if task.comments %}
+                <div class="comments-list">
+                    {% for comment in task.comments|reverse %}
+                    <div class="comment">
+                        <div class="comment-header">
+                            <strong>{{ comment.user }}</strong>
+                            <span class="comment-date">{{ comment.timestamp }}</span>
+                        </div>
+                        <div class="comment-text">{{ comment.text|replace('\n', '<br>')|safe }}</div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="no-comments">Комментариев пока нет</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="task-history-card">
+            <h3>История изменений</h3>
+            <div class="history-list">
+                {% for event in task.history|reverse %}
+                <div class="history-item">
+                    <div class="history-header">
+                        <strong>{{ event.user }}</strong>
+                        <span class="history-date">{{ event.timestamp }}</span>
+                    </div>
+                    <div class="history-action">{{ event.action }}</div>
+                    {% if event.changes %}
+                    <div class="history-changes">
+                        {% for field, change in event.changes.items() %}
+                        <div class="change-item">
+                            <strong>{{ field }}:</strong> 
+                            {{ change.from }} → {{ change.to }}
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

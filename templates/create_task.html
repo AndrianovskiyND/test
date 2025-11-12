@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+
+{% block title %}Создать задачу - АСУ ЕСПП{% endblock %}
+
+{% block content %}
+<div class="task-form-container">
+    <h2>Создать новую задачу</h2>
+    <p class="subtitle">Заполните форму для создания задачи. Авторизация не требуется.</p>
+    
+    <form method="POST" class="task-form">
+        <div class="form-group">
+            <label for="title">Краткое описание *</label>
+            <input type="text" id="title" name="title" required placeholder="Кратко опишите суть задачи">
+        </div>
+        
+        <div class="form-group">
+            <label for="description">Подробное описание *</label>
+            <textarea id="description" name="description" required rows="5" placeholder="Подробно опишите проблему или задачу"></textarea>
+        </div>
+        
+        <div class="form-row">
+            <div class="form-group">
+                <label for="urgency">Срочность *</label>
+                <select id="urgency" name="urgency" required>
+                    <option value="">Выберите срочность</option>
+                    <option value="critical">Критично (требует немедленного решения)</option>
+                    <option value="high">Срочно (решить в ближайшее время)</option>
+                    <option value="medium">Средняя (плановое решение)</option>
+                    <option value="low">Не срочно (когда будет время)</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="priority">Важность *</label>
+                <select id="priority" name="priority" required>
+                    <option value="">Выберите важность</option>
+                    <option value="critical">Критически важно</option>
+                    <option value="high">Высокая важность</option>
+                    <option value="medium">Средняя важность</option>
+                    <option value="low">Низкая важность</option>
+                </select>
+            </div>
+        </div>
+        
+        <div class="form-group">
+            <label for="creator_name">Ваше имя (необязательно)</label>
+            <input type="text" id="creator_name" name="creator_name" placeholder="Как к вам обращаться">
+        </div>
+        
+        <button type="submit" class="btn btn-primary">Создать задачу</button>
+        
+        {% if session.username %}
+        <div class="form-links">
+            <a href="{{ url_for('dashboard') }}">← Вернуться к списку задач</a>
+        </div>
+        {% else %}
+        <div class="form-links">
+            <a href="{{ url_for('login') }}">Войти в систему для просмотра всех задач</a>
+        </div>
+        {% endif %}
+    </form>
+</div>
+{% endblock %}

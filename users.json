@@ -1,0 +1,12 @@
+{
+  "admin": {
+    "password": "scrypt:32768:8:1$f8atZYfchznC0LpA$2f01a5627fe68a80699eb3d2789d4ca7452c403a22f727323a50c8ccf2e21faee44e82bac1b45eb2dc11e49aba405943dcd9dcb249972cc2c7314937450dbf25",
+    "role": "admin",
+    "name": "Администратор"
+  },
+  "user": {
+    "password": "scrypt:32768:8:1$q9GZdlTeIvMAIhjF$b56ea849b931210c231dbcfe8ac94db529e5a40cb4d28df7b70fa828e28effc6c42f2a8315dc18f9db1f95add6f34473dd474d93b808483993859a8f2442ecea",
+    "role": "worker",
+    "name": "Работник"
+  }
+}

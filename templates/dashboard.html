@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{% block title %}Панель управления - АСУ ЕСПП{% endblock %}
+
+{% block content %}
+<div class="dashboard-header">
+    <h2>Все задачи</h2>
+    <div class="dashboard-actions">
+        <a href="{{ url_for('create_task_public') }}" class="btn btn-primary">Создать задачу</a>
+        {% if session.role == 'admin' %}
+        <a href="{{ url_for('admin') }}" class="btn btn-secondary">Управление пользователями</a>
+        {% endif %}
+    </div>
+</div>
+
+{% if tasks %}
+<div class="tasks-grid">
+    {% for task in tasks %}
+    <div class="task-card" data-status="{{ task.status }}">
+        <div class="task-header">
+            <h3 class="task-title">
+                <a href="{{ url_for('task_detail', task_id=task.id) }}">{{ task.title }}</a>
+            </h3>
+            <span class="task-number">{{ task.number }}</span>
+        </div>
+        
+        <div class="task-meta">
+            <span class="task-priority priority-{{ task.priority }}">{{ task.priority }}</span>
+            <span class="task-urgency urgency-{{ task.urgency }}">{{ task.urgency }}</span>
+            <span class="task-status status-{{ task.status }}">{{ task.status }}</span>
+        </div>
+        
+        <div class="task-progress">
+            <div class="progress-bar">
+                <div class="progress-fill" style="width: {{ task.progress }}%"></div>
+            </div>
+            <span class="progress-text">{{ task.progress }}%</span>
+        </div>
+        
+        <div class="task-info">
+            <div class="info-item">
+                <strong>Создана:</strong> {{ task.created_by }}
+            </div>
+            <div class="info-item">
+                <strong>Дата:</strong> {{ task.created_at[:10] }}
+            </div>
+        </div>
+        
+        <div class="task-actions">
+            <a href="{{ url_for('task_detail', task_id=task.id) }}" class="btn btn-small">Подробнее</a>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="no-tasks">
+    <h3>Задачи отсутствуют</h3>
+    <p>Пока нет ни одной задачи. <a href="{{ url_for('create_task_public') }}">Создайте первую задачу</a></p>
+</div>
+{% endif %}
+{% endblock %}

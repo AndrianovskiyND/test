@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+
+{% block title %}Управление пользователями - АСУ ЕСПП{% endblock %}
+
+{% block content %}
+<div class="admin-container">
+    <h2>Управление пользователями</h2>
+    
+    <div class="admin-grid">
+        <div class="add-user-form">
+            <h3>Добавить пользователя</h3>
+            <form method="POST" action="{{ url_for('add_user') }}">
+                <div class="form-group">
+                    <label for="username">Имя пользователя:</label>
+                    <input type="text" id="username" name="username" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="password">Пароль:</label>
+                    <input type="password" id="password" name="password" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="name">Полное имя:</label>
+                    <input type="text" id="name" name="name" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="role">Роль:</label>
+                    <select id="role" name="role" required>
+                        <option value="worker">Работник</option>
+                        <option value="admin">Администратор</option>
+                    </select>
+                </div>
+                
+                <button type="submit" class="btn btn-primary">Добавить пользователя</button>
+            </form>
+        </div>
+
+        <div class="users-list">
+            <h3>Существующие пользователи</h3>
+            <div class="users-table">
+                <div class="table-header">
+                    <span>Имя пользователя</span>
+                    <span>Полное имя</span>
+                    <span>Роль</span>
+                </div>
+                {% for username, user_data in users.items() %}
+                <div class="table-row">
+                    <span>{{ username }}</span>
+                    <span>{{ user_data.name }}</span>
+                    <span class="role-badge role-{{ user_data.role }}">{{ user_data.role }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

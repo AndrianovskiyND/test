@@ -1,15 +1,39 @@
 from flask import Flask, render_template, request, jsonify, redirect, url_for, session, flash
-from models import UserManager, TaskManager
+from models import Database, UserManager, TaskManager
 from functools import wraps
 import os
 
 app = Flask(__name__)
-app.secret_key = 'your-secret-key-here'  # Замените на случайный ключ в продакшене
+app.secret_key = 'your-secret-key-here'
 
-user_manager = UserManager()
-task_manager = TaskManager()
+# Инициализация базы данных
+db = Database()
+user_manager = UserManager(db)
+task_manager = TaskManager(db)
 
-# Декораторы для проверки ролей
+# Русские названия для отображения
+PRIORITY_LABELS = {
+    'critical': 'Критически важно',
+    'high': 'Высокая важность', 
+    'medium': 'Средняя важность',
+    'low': 'Низкая важность'
+}
+
+URGENCY_LABELS = {
+    'critical': 'Критично',
+    'high': 'Срочно',
+    'medium': 'Средняя срочность', 
+    'low': 'Не срочно'
+}
+
+STATUS_LABELS = {
+    'новая': 'Новая',
+    'в_работе': 'В работе',
+    'тестирование': 'Тестирование',
+    'завершена': 'Завершена',
+    'отменена': 'Отменена'
+}
+
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -48,6 +72,7 @@ def login():
             session['username'] = username
             session['role'] = user['role']
             session['name'] = user['name']
+            session['user_id'] = user['id']
             flash('Успешный вход в систему!', 'success')
             return redirect(url_for('dashboard'))
         else:
@@ -64,8 +89,14 @@ def logout():
 @app.route('/dashboard')
 @login_required
 def dashboard():
-    tasks = task_manager.tasks
-    return render_template('dashboard.html', tasks=tasks)
+    tasks = task_manager.get_all_tasks()
+    workers = user_manager.get_workers()
+    return render_template('dashboard.html', 
+                         tasks=tasks, 
+                         workers=workers,
+                         priority_labels=PRIORITY_LABELS,
+                         urgency_labels=URGENCY_LABELS,
+                         status_labels=STATUS_LABELS)
 
 @app.route('/create-task', methods=['GET', 'POST'])
 def create_task_public():
@@ -92,7 +123,13 @@ def task_detail(task_id):
         flash('Задача не найдена', 'error')
         return redirect(url_for('dashboard'))
     
-    return render_template('task_detail.html', task=task)
+    workers = user_manager.get_workers()
+    return render_template('task_detail.html', 
+                         task=task, 
+                         workers=workers,
+                         priority_labels=PRIORITY_LABELS,
+                         urgency_labels=URGENCY_LABELS,
+                         status_labels=STATUS_LABELS)
 
 @app.route('/task/<int:task_id>/update', methods=['POST'])
 @login_required
@@ -107,6 +144,8 @@ def update_task(task_id):
         updates['priority'] = request.form['priority']
     if 'urgency' in request.form:
         updates['urgency'] = request.form['urgency']
+    if 'assigned_to' in request.form:
+        updates['assigned_to'] = request.form['assigned_to']
     
     task = task_manager.update_task(task_id, updates, session['name'])
     if task:
@@ -132,7 +171,7 @@ def add_comment(task_id):
 @login_required
 @role_required('admin')
 def admin():
-    users = user_manager.users
+    users = user_manager.get_all_users()
     return render_template('admin.html', users=users)
 
 @app.route('/admin/add_user', methods=['POST'])

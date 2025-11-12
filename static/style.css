@@ -645,3 +645,104 @@ header h1 {
 .form-links a:hover {
     text-decoration: underline;
 }
+
+/* Стили для таблицы */
+.table-container {
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 15px;
+    overflow: hidden;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.tasks-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+
+.tasks-table th {
+    background: #34495e;
+    color: white;
+    padding: 15px 12px;
+    text-align: left;
+    font-weight: 600;
+    border: none;
+}
+
+.tasks-table td {
+    padding: 12px;
+    border-bottom: 1px solid #ecf0f1;
+    vertical-align: middle;
+}
+
+.tasks-table tr:hover {
+    background: #f8f9fa;
+}
+
+.tasks-table tr:last-child td {
+    border-bottom: none;
+}
+
+/* Стили для ячеек таблицы */
+.task-number {
+    font-family: 'Courier New', monospace;
+    font-weight: 600;
+    color: #2c3e50;
+}
+
+.task-title a {
+    color: #2c3e50;
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.task-title a:hover {
+    color: #3498db;
+}
+
+.progress-cell {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.progress-bar {
+    flex: 1;
+    height: 8px;
+    background: #ecf0f1;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #27ae60, #2ecc71);
+    transition: width 0.3s ease;
+}
+
+.progress-text {
+    font-size: 12px;
+    font-weight: 600;
+    color: #7f8c8d;
+    min-width: 35px;
+}
+
+.assigned-to {
+    font-weight: 500;
+}
+
+.not-assigned {
+    color: #95a5a6;
+    font-style: italic;
+}
+
+.task-date {
+    color: #7f8c8d;
+    font-size: 13px;
+}
+
+.task-actions {
+    white-space: nowrap;
+}

@@ -45,9 +45,9 @@
                     <span>Полное имя</span>
                     <span>Роль</span>
                 </div>
-                {% for username, user_data in users.items() %}
+                {% for user_data in users %}
                 <div class="table-row">
-                    <span>{{ username }}</span>
+                    <span>{{ user_data.username }}</span>
                     <span>{{ user_data.name }}</span>
                     <span class="role-badge role-{{ user_data.role }}">{{ user_data.role }}</span>
                 </div>

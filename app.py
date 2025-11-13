@@ -203,7 +203,39 @@ def add_comment(task_id):
 @role_required('admin')
 def admin():
     users = user_manager.get_all_users()
-    return render_template('admin.html', users=users)
+    password_settings = user_manager.get_password_settings() 
+    return render_template('admin.html', 
+                         users=users, 
+                         password_settings=password_settings,
+                         current_user_id=session.get('user_id'))
+
+@app.route('/admin/settings')
+@login_required
+@role_required('admin')
+def admin_settings():
+    password_settings = user_manager.get_password_settings()
+    return render_template('settings.html', 
+                         password_settings=password_settings)
+
+@app.route('/admin/api/settings/password', methods=['POST'])
+@login_required
+@role_required('admin')
+def api_update_password_settings():
+    payload = request.get_json(silent=True) or {}
+    
+    # Валидация
+    min_length = payload.get('min_length', 6)
+    if not isinstance(min_length, int) or min_length < 4 or min_length > 128:
+        return jsonify({'error': 'Минимальная длина должна быть от 4 до 128 символов'}), 400
+    
+    # Сохранение настроек
+    from models import SystemSettingsManager  # Добавь импорт если нужно
+    settings_manager = SystemSettingsManager(db)
+    settings_manager.set_setting('password_min_length', str(min_length))
+    settings_manager.set_setting('password_require_digits', str(payload.get('require_digits', False)).lower())
+    settings_manager.set_setting('password_require_special', str(payload.get('require_special', False)).lower())
+    
+    return jsonify({'message': 'Настройки паролей обновлены'})
 
 @app.route('/admin/add_user', methods=['POST'])
 @login_required

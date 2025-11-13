@@ -224,6 +224,10 @@ class Database:
 class UserManager:
     def __init__(self, db: Database):
         self.db = db
+        self.settings_manager = SystemSettingsManager(db)
+
+    def get_password_settings(self):
+        return self.settings_manager.get_password_settings()
 
     def verify_user(self, username: str, password: str) -> Optional[Dict[str, Any]]:
         conn = sqlite3.connect(self.db.db_path)
